@@ -21,11 +21,13 @@ Use `MULTILIB_NO_EXTENSIONS=1 YARL_NO_EXTENSIONS=1 pip install -r -requirements.
 are not available for your operating system, so these extra flags will skip the compilation and use their raw Python scripts (slower performance).
 
 
-## replies.csv Legend
+## replies.csv Example
 
-| RegEx Pattern | Message to Send               | Requires Mention? | React with Emoji  |
-| ------------- | ----------------------------- | ----------------- | ----------------- |
-| \bhello\b     | hi!                           | 0                 | 🥞                |
+| RegEx Pattern | Message to Send | Requires Mention? | React with Emoji |
+| - | - | - | - |
+| \bfries\b | "there is the thin skinless ones, thick skinless, thic with skin, truffle oil, sour scream fries, fries dip on MCD ice cream cone" | 0 | 🍟 |
+
+![fries](https://user-images.githubusercontent.com/11093103/146556296-c8b6a00b-4a30-491b-ac42-7f11d3a9ebe4.jpg)
 
 **0:** The regular expression pattern to check the incoming message with.
 
