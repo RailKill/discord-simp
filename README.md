@@ -5,7 +5,7 @@ this feature and store responses per server are welcomed.
 
 
 ## How to Use
-1. Create your Discord bot username by following this guide: https://discordpy.readthedocs.io/en/stable/discord.html
+1. Create your Discord bot user and invite it to your server by following this guide: https://discordpy.readthedocs.io/en/stable/discord.html
 2. Download and install latest version of [Python](https://www.python.org/downloads/).
 3. `git clone` this repository or download as zip under the green Code button in this GitHub page and extract it.
 4. Open `cmd` and go into repository folder by typing `cd <REPOSITORY_FOLDER_PATH>`
