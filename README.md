@@ -1,4 +1,4 @@
-# Discord Simple RegEx Reply Bot
+# Discord Simple RegEx Message Bot
 This bot will read messages from any channel it is in, search the message for a RegEx pattern defined in the first column of 'replies.csv',
 and replies with the second column of 'replies.csv' if a match is found. It was not designed as a public bot, but pull requests to support
 this feature and store responses per server are welcomed.
