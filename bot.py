@@ -11,14 +11,17 @@ CSV_FILENAME = 'replies.csv'
 
 
 class BotClient(discord.Client):
-    """A discord.Client which reads a .csv of replies and responds accordingly during on_message events."""
+    """
+    A discord.Client which reads a .csv of possible replies and responds
+    accordingly during on_message events.
+    """
     def _load_responses(self):
         config = configparser.ConfigParser()
         config.read(CONFIG_FILENAME)
         csv_filename = config.get('csv', 'filename', fallback = CSV_FILENAME)
         try:
-            with open(csv_filename, newline='', encoding='utf8') as genius_ideas:
-                reader = csv.reader(genius_ideas)
+            with open(csv_filename, newline='', encoding='utf8') as ideas:
+                reader = csv.reader(ideas)
                 self.responses = {}
                 for row in reader:
                     reply = self.responses.get(row[0])
@@ -33,23 +36,27 @@ class BotClient(discord.Client):
 
     async def on_ready(self, default_id = None):
         print('Logged on as {0}!'.format(self.user))
-        self.mention = re.compile("<@[!&]*{}>".format(getattr(self.user, 'id', default_id)))
+        bot_user_id = getattr(self.user, 'id', default_id)
+        self.mention = re.compile("<@[!&]*{}>".format(bot_user_id))
         self._load_responses()
 
     async def on_message(self, message):
         print('Message from {0.author}: {0.content}'.format(message))
         if message.author != self.user:
-            if message.content == '!reload' and message.channel.permissions_for(message.author).administrator:
-                await message.channel.send('{} reloaded.'.format(self._load_responses()))
+            if (message.content == '!reload' and message.channel
+                    .permissions_for(message.author).administrator):
+                filename = self._load_responses()
+                await message.channel.send('{} reloaded.'.format(filename))
             else:
                 for response in self.responses.values():
-                    if (not response.require_mention or self.mention.search(message.content)) \
-                            and await response.reply_to(message):
+                    if ((not response.require_mention 
+                            or self.mention.search(message.content))
+                            and await response.reply_to(message)):
                         break
 
 
 class BotReply:
-    """A message integrated with regex."""
+    """Self-contained message logic integrated with regex."""
     def __init__(self, pattern, message, require_mention, react_emoji):
         self.pattern = re.compile(pattern, re.I)
         self.messages = [message]
@@ -63,7 +70,7 @@ class BotReply:
             self.index = 0
 
     async def reply_to(self, message):
-        """Automatically perform a regex search on given string and sends a Discord message if there is a match."""
+        """Sends a Discord message if pattern matches the given message."""
         result = False
         if self.pattern.search(message.content):
             await message.channel.send(self.messages[self.index])
@@ -82,8 +89,8 @@ if __name__ == '__main__':
             config.write(configfile)
 
     if not config['secret']['token']:
-        sys.exit("Missing bot token in 'config.ini' | "
-                "see Your Application > Bot @ https://discord.com/developers/applications")
+        sys.exit("Missing bot token in 'config.ini' | see Your Application "
+                "> Bot @ https://discord.com/developers/applications")
 
     try:
         client = BotClient()
