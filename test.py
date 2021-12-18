@@ -4,8 +4,8 @@ import sys
 import warnings
 import unittest
 
-from bot import BotClient, BotReply
-from unittest.mock import AsyncMock, MagicMock
+from bot import BotClient, BotReply, BotCommand
+from unittest.mock import patch, AsyncMock, MagicMock
 
 
 class NoPrint:
@@ -27,7 +27,7 @@ class TestBotClient(unittest.IsolatedAsyncioTestCase):
 	def setUp(self):
 		with warnings.catch_warnings():
 			warnings.simplefilter('ignore', DeprecationWarning)
-			self.client = BotClient()
+			self.client = BotClient(MagicMock())
 
 	async def assert_response(self, message, needs_mention, expect_reply):
 		"""Helper assert function for on_message tests."""
@@ -43,16 +43,41 @@ class TestBotClient(unittest.IsolatedAsyncioTestCase):
 		else:
 			reply_to.assert_not_called()
 
+	def test_add_response(self):
+		self.client._add_response('!add mabols')
+		self.client.loader.add.assert_called()
+
+	def test_delete_response(self):
+		self.client._delete_response('!delete 9001')
+		self.client.loader.delete.assert_called()
+
+	def test_extract_parameter(self):
+		self.assertIsNone(self.client._extract_parameter('single'))
+		self.assertEqual(self.client._extract_parameter('1 2nd 30'), '2nd 30')
+
+	def test_list_responses(self):
+		expected_list = [['somebody', 'once', '7010', 'me']]
+		self.client._extract_parameter = MagicMock(return_value = None)
+		self.client.loader.list = MagicMock(return_value = expected_list)
+		self.assertIn('0: some', self.client._list_responses('!list'))
+		self.client._extract_parameter = MagicMock(return_value = '100')
+		self.assertIn('Pattern: some', self.client._list_responses('!list 100'))
+		self.client.loader.list = MagicMock(return_value = [])
+		self.assertIn('not found', self.client._list_responses('!list 0'))
+
 	def test_load_responses(self):
+		self.client.loader.list = MagicMock(return_value = [
+			['sigma', 'b', '0', 'l'],
+			['je.*', 'bayted', '1', 'x'],
+			['je.*', 'broni', '2', 'r'],
+			['je.*', 'remy', '3', 'c'],
+		])
 		with NoPrint():
 			self.client._load_responses()
-		keys = iter(self.client.responses.keys())
-		self.assertEqual(next(keys), r'\bfries\b',
-				'Loaded responses 1st key is incorrect.')
-		self.assertEqual(next(keys), r'tell.*joke',
-				'Loaded responses 2nd key is incorrect.')
-		self.assertEqual(len(self.client.responses.keys()), 2,
-				'Responses should only contain 2 keys.')
+		keys = list(self.client.responses.keys())
+		self.assertIn(r'^!reload$', keys)
+		self.assertIn(r'je.*', keys)
+		self.assertEqual(len(keys), 6)
 
 	async def test_on_ready(self):
 		self.client._load_responses = MagicMock(name = '_load_responses()')
@@ -75,16 +100,6 @@ class TestBotClient(unittest.IsolatedAsyncioTestCase):
 		# Don't respond if require_mention message does not have bot mention.
 		await self.assert_response(AsyncMock(content = 'baboom'), True, False)
 
-	async def test_on_message_reload(self):
-		# Test on_message event using the '!reload' command.
-		message = AsyncMock(content = '!reload', author = 'somebody')
-		message.channel.permissions_for = \
-				MagicMock(return_value = MagicMock(administrator = True))
-		self.client._load_responses = MagicMock(name = '_load_responses()')
-		with NoPrint():
-			await self.client.on_message(message)
-		self.client._load_responses.assert_called()
-
 
 class TestBotReply(unittest.IsolatedAsyncioTestCase):
 	"""Test case for the BotReply class from bot.py"""
@@ -106,6 +121,36 @@ class TestBotReply(unittest.IsolatedAsyncioTestCase):
 		message.channel.send.assert_called_with('hello')
 		reply._next_message.assert_called()
 		message.add_reaction.assert_called_with('\U0001F602')
+
+
+class TestBotCommand(unittest.IsolatedAsyncioTestCase):
+	"""Test case for the BotCommand class from bot.py"""
+	def setUp(self):
+		self.expected = 'test callback message'
+		self.callback = MagicMock(return_value = self.expected)
+
+	async def assert_reload_command(self, content, is_admin, is_called):
+		self.message = AsyncMock(content = content, author = 'moderator')
+		self.message.channel.permissions_for = \
+				MagicMock(return_value = MagicMock(administrator = is_admin))
+		with patch.object(BotReply, 'reply_to') as bot_reply:
+			command = BotCommand('^!reload$', self.callback)
+			await command.reply_to(self.message)
+			if is_called:
+				self.callback.assert_called_with(self.message.content)
+				bot_reply.assert_called_with(self.message, self.expected, True)
+			else:
+				self.callback.assert_not_called()
+				bot_reply.assert_not_called()
+
+	async def test_on_command_with_privilege(self):
+		await self.assert_reload_command('!reload', True, True)
+
+	async def test_on_command_with_privilege_unmatched(self):
+		await self.assert_reload_command('!not-reload', True, False)
+
+	async def test_on_command_without_privilege(self):
+		await self.assert_reload_command('!reload', False, False)
 
 
 if __name__ == '__main__':
