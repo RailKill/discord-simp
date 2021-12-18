@@ -31,9 +31,9 @@ class BotClient(discord.Client):
         print('{} loaded.'.format(csv_filename))
         return csv_filename
 
-    async def on_ready(self):
+    async def on_ready(self, default_id = None):
         print('Logged on as {0}!'.format(self.user))
-        self.mention = re.compile("<@[!&]*{}>".format(self.user.id))
+        self.mention = re.compile("<@[!&]*{}>".format(getattr(self.user, 'id', default_id)))
         self._load_responses()
 
     async def on_message(self, message):
