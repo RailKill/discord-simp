@@ -84,7 +84,7 @@ if __name__ == '__main__':
     config = configparser.ConfigParser()
     if not config.read(CONFIG_FILENAME):
         config['secret'] = {'token': ''}
-        config['csv'] = {'filename:': CSV_FILENAME}
+        config['csv'] = {'filename': CSV_FILENAME}
         with open(CONFIG_FILENAME, 'w') as configfile:
             config.write(configfile)
 
