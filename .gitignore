@@ -11,4 +11,5 @@ env/
 venv/
 
 # Local configuration
+screenshots/
 config.ini
