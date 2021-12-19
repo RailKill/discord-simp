@@ -5,6 +5,7 @@ import warnings
 import unittest
 
 from bot import BotClient, BotReply, BotCommand
+from data import CsvLoader
 from unittest.mock import patch, AsyncMock, MagicMock
 
 
@@ -151,6 +152,66 @@ class TestBotCommand(unittest.IsolatedAsyncioTestCase):
 
 	async def test_on_command_without_privilege(self):
 		await self.assert_reload_command('!reload', False, False)
+
+
+class TestCsvLoader(unittest.TestCase):
+	def setUp(self):
+		self.loader = CsvLoader()
+		self.loader.hostname = 'test_replies.csv'
+		self.contents = 'honor,guides,0,me\nnot,enough,1,minerals\n'
+		with open(self.loader.hostname, 'w', newline='') as csvfile:
+			csvfile.write(self.contents)
+
+	def assert_same_contents(self):
+		with open(self.loader.hostname, 'r') as check:
+			self.assertEqual(check.read(), self.contents)
+
+	def test_add(self):
+		entry = 'just,right,1,man'
+		self.assertTrue(self.loader.add(entry))
+		with open(self.loader.hostname, 'r') as check:
+			self.assertEqual(check.read(), f'{self.contents}{entry}\n')
+
+	def test_add_too_little_fields(self):
+		self.assertFalse(self.loader.add('too,little'))
+		self.assert_same_contents()
+
+	def test_add_too_many_fields(self):
+		self.assertFalse(self.loader.add('too,many,0,to,add'))
+		self.assert_same_contents()
+
+	def test_add_wrong_format(self):
+		self.assertFalse(self.loader.add('third,field,not,digit'))
+		self.assert_same_contents()
+
+	def test_delete(self):
+		self.assertTrue(self.loader.delete(1))
+		with open(self.loader.hostname, 'r') as check:
+			self.assertEqual(check.read(), 'honor,guides,0,me\n')
+
+	def test_delete_not_found(self):
+		self.assertFalse(self.loader.delete(2))
+		self.assert_same_contents()
+
+	def test_list(self):
+		self.assertEqual(self.loader.list(False, 0),
+				[['honor', 'guides', '0', 'me']])
+
+	def test_list_all(self):
+		self.assertEqual(len(self.loader.list()), 2)
+
+	def test_list_truncate(self):
+		self.assertIn('..', self.loader.list(True)[1][3])
+
+	def test_list_invalid_index(self):
+		self.assertEqual(self.loader.list(False, 2), [])
+
+	def tearDown(self):
+		try:
+			os.remove('test_replies.csv')
+			os.remove(self.loader.CONFIG_FILENAME)
+		except FileNotFoundError:
+			pass
 
 
 if __name__ == '__main__':
