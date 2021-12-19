@@ -209,7 +209,6 @@ class TestCsvLoader(unittest.TestCase):
 	def tearDown(self):
 		try:
 			os.remove('test_replies.csv')
-			os.remove(self.loader.CONFIG_FILENAME)
 		except FileNotFoundError:
 			pass
 
