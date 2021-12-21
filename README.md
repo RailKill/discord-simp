@@ -80,3 +80,13 @@ Type these commands in any text channel the bot is in to execute them. Only work
 
     ![delete](https://user-images.githubusercontent.com/11093103/146659768-5ab9cba2-b539-445e-a189-cc1c7a340ba1.jpg)
   </details>
+ 
+ - `!lock <row>`
+   <details>
+      <summary>Locks bot commands to the given comma-delimited list of permissions, role ids, and user ids.</summary>
+      
+      By default, bot commands can only be used by users with the administrator permission. It is equivalent to typing `!lock administrator,,` or `!lock reset`.
+      [List of permission attributes can be found here](https://discordpy.readthedocs.io/en/stable/api.html#permissions). You can use multiple fields such as
+      `!lock "manage_guild,kick_members","123,456",` which will only alow users with permissions levels equal to or greater than manage server + kick, and must
+      belong to either role ID 123 or 456. An admin who is not in either role for example, will not be able to use any commands.
+   </details>
