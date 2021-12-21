@@ -5,7 +5,7 @@ import warnings
 import unittest
 
 from bot import BotClient, BotReply, BotCommand
-from data import CsvLoader
+from data import CommandLock, CsvLoader
 from unittest.mock import patch, AsyncMock, MagicMock
 
 
@@ -78,7 +78,26 @@ class TestBotClient(unittest.IsolatedAsyncioTestCase):
 		keys = list(self.client.responses.keys())
 		self.assertIn(r'^!reload$', keys)
 		self.assertIn(r'je.*', keys)
-		self.assertEqual(len(keys), 6)
+		self.assertEqual(len(keys), 7)
+
+	def test_lock_commands(self):
+		self.client.loader.NUMBER_OF_COMMANDS = 3
+		self.client.responses = {
+			'one': MagicMock(lock = [[[],[],[]]]),
+			'two': MagicMock(lock = [[[],[],[]]]),
+			'three': MagicMock(lock = [[[],[],[]]]),
+			'four': MagicMock(lock = [[[],[],[]]]),
+		}
+		locks = [[['c0m', 'perm'], ['67', '68', '69'], ['70']]]
+		self.client.loader.get_locks.return_value = locks
+		self.client.loader.set_locks.return_value = True
+		self.assertIn("Permissions: ['c0m',", self.client._lock_commands(''))
+		self.assertEqual(self.client.responses['two'].lock, locks[0])
+		self.assertNotEqual(self.client.responses['four'].lock, locks[0])
+		self.client.loader.set_locks.return_value = False
+		failed_output = self.client._lock_commands('chocolate rain')
+		self.assertIn('Unexpected', failed_output)
+		self.assertIn("Users: ['70']", failed_output)
 
 	async def test_on_ready(self):
 		self.client._load_responses = MagicMock(name = '_load_responses()')
@@ -132,8 +151,11 @@ class TestBotCommand(unittest.IsolatedAsyncioTestCase):
 
 	async def assert_reload_command(self, content, is_admin, is_called):
 		self.message = AsyncMock(content = content, author = 'moderator')
-		self.message.channel.permissions_for = \
-				MagicMock(return_value = MagicMock(administrator = is_admin))
+		permissions_mock = MagicMock()
+		permissions_mock.__ge__ = lambda self, other: is_admin
+		permissions_mock.__le__ = lambda self, other: not is_admin
+		self.message.channel.permissions_for = MagicMock(
+				return_value = permissions_mock)
 		with patch.object(BotReply, 'reply_to') as bot_reply:
 			command = BotCommand('^!reload$', self.callback)
 			await command.reply_to(self.message)
@@ -153,11 +175,32 @@ class TestBotCommand(unittest.IsolatedAsyncioTestCase):
 	async def test_on_command_without_privilege(self):
 		await self.assert_reload_command('!reload', False, False)
 
+	def test_is_valid_role(self):
+		user = MagicMock(roles = [MagicMock(id = 444), MagicMock(id = 555)])
+		command = BotCommand('')
+		command.lock = MagicMock(roles = [555])
+		self.assertTrue(command._is_valid_role(user))
+		del user.roles[-1]
+		self.assertFalse(command._is_valid_role(user))
+		del command.lock.roles[0]
+		self.assertTrue(command._is_valid_role(user))
+
+	def test_is_valid_user(self):
+		user = MagicMock(id = 400)
+		command = BotCommand('')
+		command.lock = MagicMock(users = [100, 200, 300, 400, 500, 600])
+		self.assertTrue(command._is_valid_user(user))
+		del command.lock.users[3]
+		self.assertFalse(command._is_valid_user(user))
+		command.lock.users = []
+		self.assertTrue(command._is_valid_user(user))
+
 
 class TestCsvLoader(unittest.TestCase):
 	def setUp(self):
 		self.loader = CsvLoader()
 		self.loader.hostname = 'test_replies.csv'
+		self.loader.lockname = 'test_locks.csv'
 		self.contents = 'honor,guides,0,me\nnot,enough,1,minerals\n'
 		with open(self.loader.hostname, 'w', newline='') as csvfile:
 			csvfile.write(self.contents)
@@ -193,6 +236,15 @@ class TestCsvLoader(unittest.TestCase):
 		self.assertFalse(self.loader.delete(2))
 		self.assert_same_contents()
 
+	def test_get_locks(self):
+		with open(self.loader.lockname, 'w', newline='') as locks_file:
+			locks_file.write('"manage_guild",,\n,"123","456,789"\n')
+		locks = self.loader.get_locks()
+		self.assertTrue(locks[0].permissions.manage_guild)
+		self.assertIn(123, locks[1].roles)
+		self.assertIn(789, locks[1].users)
+		self.assertEqual(len(locks), self.loader.NUMBER_OF_COMMANDS)
+
 	def test_list(self):
 		self.assertEqual(self.loader.list(False, 0),
 				[['honor', 'guides', '0', 'me']])
@@ -206,11 +258,44 @@ class TestCsvLoader(unittest.TestCase):
 	def test_list_invalid_index(self):
 		self.assertEqual(self.loader.list(False, 2), [])
 
+	def test_set_locks(self):
+		entry = '"add_reactions,stream",,420'
+		self.assertTrue(self.loader.set_locks(entry))
+		with open(self.loader.lockname, 'r') as check:
+			self.assertEqual(check.read(),
+					(entry + '\n') * self.loader.NUMBER_OF_COMMANDS)
+
+	def test_set_locks_none(self):
+		self.assertFalse(self.loader.set_locks(None))
+
+	def test_set_locks_too_little_fields(self):
+		self.assertFalse(self.loader.set_locks('"administrator,speak",100'))
+
+	def test_set_locks_too_many_fields(self):
+		self.assertFalse(self.loader.set_locks('administrator,,,100,'))
+
 	def tearDown(self):
 		try:
 			os.remove('test_replies.csv')
+			os.remove('test_locks.csv')
 		except FileNotFoundError:
 			pass
+
+
+class TestCommandLock(unittest.TestCase):
+	def test_conversion_to_list(self):
+		permissions = ['stream']
+		roles = ['rola', '3999', 'roli']
+		users = ['19', 'uzer', 'usop', '9']
+		conversion = list(CommandLock(permissions, roles, users))
+		self.assertTrue(conversion[0].stream)
+		self.assertEqual(conversion[1], [3999])
+		self.assertEqual(conversion[2], [19, 9])
+
+	def test_set_permission_non_existent(self):
+		permissions = CommandLock()._set_permissions(['dunce', 'speak', 'hi'])
+		self.assertFalse(hasattr(permissions, 'dunce'))
+		self.assertTrue(permissions.speak)
 
 
 if __name__ == '__main__':

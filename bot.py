@@ -2,7 +2,7 @@ import discord
 import re
 import sys
 
-from data import CsvLoader
+from data import CommandLock, CsvLoader
 
 
 class BotClient(discord.Client):
@@ -10,8 +10,8 @@ class BotClient(discord.Client):
     A discord.Client which reads a .csv of possible replies and responds
     accordingly during on_message events.
     """
-    def __init__(self, loader = CsvLoader()):
-        super().__init__()
+    def __init__(self, loader = CsvLoader(), **kwargs):
+        super().__init__(**kwargs)
         self.loader = loader
 
     def _add_response(self, content):
@@ -47,11 +47,13 @@ class BotClient(discord.Client):
         return output
 
     def _load_responses(self, *_args):
+        cl = self.loader.get_locks()
         commands = [
-            BotCommand(r'^!reload$', self._load_responses),
-            BotCommand(r'^!list$|^!list\s+\d*$', self._list_responses),
-            BotCommand(r'^!add\s+.+$', self._add_response),
-            BotCommand(r'^!delete\s+\d*$', self._delete_response),
+            BotCommand(r'^!add\s+.+$', self._add_response, cl[0]),
+            BotCommand(r'^!delete\s+\d*$', self._delete_response, cl[1]),
+            BotCommand(r'^!list$|^!list\s+\d*$', self._list_responses, cl[2]),
+            BotCommand(r'^!lock\s?[^\s]*$', self._lock_commands, cl[3]),
+            BotCommand(r'^!reload$', self._load_responses, cl[4]),
         ]
         self.responses = {cmd.pattern.pattern: cmd for cmd in commands}
         for row in self.loader.list():
@@ -63,6 +65,19 @@ class BotClient(discord.Client):
         success = 'Loaded responses from {}.'.format(self.loader.hostname)
         print(success)
         return success
+
+    def _lock_commands(self, content):
+        parameter = self._extract_parameter(content)
+        details = '\n```\nPermissions: {}\nRoles: {}\nUsers: {}\n```'
+        output = 'Unexpected format for command lock. Current lock:'
+        result = self.loader.set_locks(parameter, parameter == 'reset')
+        lock = self.loader.get_locks()[0]
+        if result:
+            for i in range(self.loader.NUMBER_OF_COMMANDS):
+                key = list(self.responses.keys())[i]
+                self.responses[key].lock = lock
+                output = 'A new command lock is in place:'
+        return (output + details).format(*lock)
 
     async def on_ready(self, default_id = None):
         print('Logged on as {0}!'.format(self.user))
@@ -116,15 +131,35 @@ class BotReply:
 
 class BotCommand(BotReply):
     """Bot command with a callback and privilege level required to activate."""
-    def __init__(self, pattern, callback = lambda: None,
-                privilege = 'administrator'):
+    def __init__(self, pattern, callback = lambda: None, lock = CommandLock()):
         super().__init__(pattern, '', 0, '')
         self.callback = callback
-        self.privilege = privilege
+        self.lock = lock
+
+    def _is_permitted(self, message):
+        return not self.lock.permissions or message.channel.permissions_for(
+                message.author) >= self.lock.permissions
+
+    def _is_valid_role(self, user):
+        result = False
+        if not self.lock.roles:
+            result = True
+        elif user.roles:
+            for role in user.roles:
+                if role.id in self.lock.roles:
+                    result = True
+                    break
+        return result
+
+    def _is_valid_user(self, user):
+        return not self.lock.users or user.id in self.lock.users
 
     async def reply_to(self, message):
-        if (self.pattern.search(message.content) and getattr(message.channel
-                .permissions_for(message.author), self.privilege)):
+        if (self.pattern.search(message.content)
+                and (message.author == message.guild.owner
+                or self._is_permitted(message)
+                and self._is_valid_role(message.author)
+                and self._is_valid_user(message.author))):
             await super().reply_to(
                     message, self.callback(message.content), True)
 
@@ -136,7 +171,9 @@ if __name__ == '__main__':
         sys.exit("Missing bot token in 'config.ini' | see Your Application "
                 "> Bot @ https://discord.com/developers/applications")
     try:
-        BotClient(loader).run(token)
+        intents = discord.Intents.default()
+        intents.members = True
+        BotClient(loader, intents = intents).run(token)
     except discord.DiscordException as discord_exception:
         sys.exit('Discord client error: ' + str(discord_exception))
     except OSError as os_error:
