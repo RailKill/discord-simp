@@ -133,6 +133,10 @@ class TestBotReply(unittest.IsolatedAsyncioTestCase):
 		reply._next_message()
 		self.assertEqual(reply.index, 0)
 
+	def test_non_numeric_require_mention_defaults_to_zero(self):
+		reply = BotReply('', '', '', '')
+		self.assertEqual(reply.require_mention, 0)
+
 	async def test_reply_to(self):
 		message = AsyncMock(content = 'good morning')
 		reply = BotReply(r'good\smorning', 'hello', 0, '\U0001F602')

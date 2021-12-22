@@ -100,9 +100,12 @@ class BotReply:
     def __init__(self, pattern, message, require_mention, react_emoji):
         self.pattern = re.compile(pattern, re.I)
         self.messages = [message]
-        self.require_mention = bool(int(require_mention))
         self.react_emoji = react_emoji
         self.index = 0
+        try:
+            self.require_mention = bool(int(require_mention))
+        except ValueError:
+            self.require_mention = 0
 
     def _next_message(self):
         self.index += 1
