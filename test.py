@@ -141,10 +141,30 @@ class TestBotReply(unittest.IsolatedAsyncioTestCase):
 		message = AsyncMock(content = 'good morning')
 		reply = BotReply(r'good\smorning', 'hello', 0, '\U0001F602')
 		reply._next_message = MagicMock('_next_message()')
-		await reply.reply_to(message)
+		self.assertTrue(await reply.reply_to(message))
 		message.channel.send.assert_called_with('hello')
 		reply._next_message.assert_called()
 		message.add_reaction.assert_called_with('\U0001F602')
+
+	async def test_reply_to_custom_response(self):
+		message = AsyncMock(content = 'a')
+		reply = BotReply('a', 'b', '0', '')
+		reply._next_message = MagicMock('_next_message()')
+		self.assertTrue(await reply.reply_to(message, 'expected'))
+		reply._next_message.assert_not_called()
+		message.channel.send.assert_called_with('expected')
+
+	async def test_reply_to_should_not_send_empty_message(self):
+		message = AsyncMock(content = 'dont matter')
+		reply = BotReply(r'matter', '', '0', '')
+		self.assertFalse(await reply.reply_to(message))
+		message.channel.send.assert_not_called()
+
+	async def test_reply_to_skip_regex(self):
+		message = AsyncMock(content = 'whatever')
+		reply = BotReply('nopattern', 'this the reply', '0', '')
+		self.assertTrue(await reply.reply_to(message, '', True))
+		message.channel.send.assert_called_with('this the reply')
 
 
 class TestBotCommand(unittest.IsolatedAsyncioTestCase):

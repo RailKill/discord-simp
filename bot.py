@@ -116,20 +116,24 @@ class BotReply:
         if self.react_emoji:
             try:
                 await message.add_reaction(self.react_emoji)
+                return True
             except discord.errors.HTTPException as invalid_emoji:
                 self.react_emoji = ''
                 print(invalid_emoji)
+        return False
 
     async def reply_to(self, message, response = '', skip_regex = False):
         """Sends a Discord message if pattern matches the given message."""
-        result = False
+        sent = False
+        reacted = False
         if skip_regex or self.pattern.search(message.content):
             if not response:
                 response = self.messages[self.index]
                 self._next_message()
-            await message.channel.send(response)
-            await self._react_to(message)
-        return result
+            if response:
+                sent = await message.channel.send(response)
+            reacted = await self._react_to(message)
+        return sent or reacted
 
 
 class BotCommand(BotReply):
